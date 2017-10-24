@@ -11,7 +11,7 @@ import 'rxjs/add/operator/first';
 import { HomePage } from '../pages/home/home';
 import { PaymentPage } from '../pages/payment/payment';
 
-
+import { GlobalVar } from '../pages/provider/globalvar';
 @Component({
   templateUrl: 'app.html'
 })
@@ -22,10 +22,11 @@ export class MyApp {
   tabBarElement: any;
   splash = true;
   pseudo: any;
-
+  
+  userId = "";
   pages: Array<{ title: string, component: any, icon: any }>;
 
-  constructor(public platform: Platform, public statusBar: StatusBar, public splashScreen: SplashScreen, public push: Push, public alertCtrl: AlertController, private afAuth: AngularFireAuth, private afDatabase: AngularFireDatabase, public modalCtrl: ModalController) {
+  constructor(public platform: Platform, public globalVar: GlobalVar, public statusBar: StatusBar, public splashScreen: SplashScreen, public push: Push, public alertCtrl: AlertController, private afAuth: AngularFireAuth, private afDatabase: AngularFireDatabase, public modalCtrl: ModalController) {
     this.initializeApp();
 
     // used for an example of ngFor and navigation
@@ -115,12 +116,16 @@ export class MyApp {
           this.afDatabase.object('users/' + user.uid)
             .first().subscribe(user => {
               this.pseudo = user.pseudo;
+              this.globalVar.isVip = user.vip;
+              this.userId = user.uid;
               if (this.pseudo == "kojak" || this.pseudo == "KOJAK") {
                 this.pages.push({ title: 'Administration', component: 'AdministrationPage', icon: 'md-clipboard' });
               }
             });
         } else {
           this.pseudo = null;
+          this.globalVar.isVip = false;
+          this.userId = "";
         }
       });
   }
@@ -128,35 +133,78 @@ export class MyApp {
   logout() {
     this.afAuth.auth.signOut();
     this.nav.setRoot(HomePage);
+    this.globalVar.isVip = false;
+    this.userId = "";
   }
 
   openPage(page) {
-    if (page.title == 'Bankroll' || page.title == 'Bankroll concours') {
+    if (page.title == 'Chatroom' || page.title == 'Bankroll Concours') {
       if (!this.pseudo) {
         let loginModal = this.modalCtrl.create('LoginPage');
         loginModal.present();
         loginModal.onDidDismiss(logged => {
           if (logged) {
             console.log("PersionalData", logged.uid);
+            this.globalVar.userUid = logged.uid;
             this.afDatabase.object("/users/" + logged.uid).subscribe(paris => {
+              this.globalVar.isVip = paris.vip;
               if (paris.vip) {
-                if (paris.startdate) {
-                  this.nav.push(PaymentPage);
-                }
-                else {
-                  this.nav.push(PaymentPage);
+                var date = paris.date;
+                if (date) {
+                  var current = new Date().getMilliseconds();
+                  if (date + 1000 * 60 * 60 * 24 * 30 < current) {
+                    this.nav.push(PaymentPage, {
+                      userId: logged.uid
+                    });
+                  }
+                  else {
+                    this.nav.setRoot(page.component, {
+                      userId: logged.uid
+                    });
+                  }
                 }
               } else {
-                this.nav.push(PaymentPage);
+                this.nav.push(PaymentPage, {
+                  userId: logged.uid
+                });
               }
             });
           }
         });
       } else {
-        this.nav.setRoot(page.component);
+        if (this.globalVar.isVip) {
+          this.nav.setRoot(page.component, {
+            userId: this.userId
+          });
+        }
+        else {
+          this.nav.push(PaymentPage, {
+            userId: this.userId
+          });
+        }
+      }
+    } else if (page.title == 'Bankroll') {
+      if (!this.pseudo) {
+        let loginModal = this.modalCtrl.create('LoginPage');
+        loginModal.present();
+        loginModal.onDidDismiss(logged => {
+          if (logged) {
+            console.log(logged.uid);
+            this.globalVar.userUid = logged.uid;
+            this.nav.setRoot(page.component, {
+              userId: this.userId
+            });
+          }
+        });
+      } else {
+        this.nav.setRoot(page.component, {
+          userId: this.userId
+        });
       }
     } else {
-      this.nav.setRoot(page.component);
+      this.nav.setRoot(page.component, {
+        userId: this.userId
+      });
     }
   }
 }
